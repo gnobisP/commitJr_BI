@@ -1,0 +1,91 @@
+id_empresa,nome,cnpj,telefone,email,capital_social,endereco,area_empresa
+1,Oliveira S/A,59.124.067/0001-80,+55 (011) 2626-2050,costavitor-hugo@example.com,4648,"Estação de Rezende, 34
+Vitoria
+47821-584 da Conceição / DF",PetShop
+2,Aragão,07.296.318/0001-00,+55 (061) 4296 6232,diogoribeiro@example.com,10012,"Trecho Rios, 73
+Vila Pilar
+97945-987 Cirino / ES",Ensino
+3,Camargo Novais - ME,69.305.872/0001-64,(051) 7065 7380,carolina73@example.org,8314,"Campo de Vasconcelos, 10
+Miramar
+79637374 Barbosa da Prata / ES",E-commerce
+4,Caldeira Nascimento S.A.,74.029.156/0001-31,+55 81 0948 7498,levi43@example.org,4358,"Praça Lopes, 29
+Nazare
+02897-711 Campos / GO",Advocacia
+5,Monteiro,18.945.207/0001-02,61 7993-5547,bento41@example.com,14825,"Praça Vasconcelos, 10
+São Jorge 3ª Seção
+82051051 Sá do Sul / PB",PetShop
+6,Ferreira,76.245.839/0001-51,+55 (084) 6788 2769,marina39@example.net,1976,"Trecho Sales, 11
+Jaqueline
+16022-128 Camargo / SC",Advocacia
+7,Silva S.A.,74.912.638/0001-35,(081) 9529-0886,goncalvesmaria-liz@example.com,8164,"Quadra Gustavo Henrique da Conceição, 59
+Antonio Ribeiro De Abreu 1ª Seção
+63282306 Sá das Flores / MS",Ensino
+8,Sales - ME,37.089.265/0001-18,(071) 2463-1344,maite75@example.com,17559,"Residencial de da Conceição, 7
+Ouro Minas
+54714499 da Luz / PR",PetShop
+9,Rezende,19.784.253/0001-21,+55 61 5849 5281,iferreira@example.org,19390,"Feira Laís Cavalcante
+Olhos D'água
+27373-565 Farias / SP",Ensino
+10,Albuquerque Fogaça S.A.,93.056.827/0001-06,51 2350 8496,cauapastor@example.net,18856,"Ladeira Daniel Monteiro, 44
+Capitão Eduardo
+42020948 Fonseca do Campo / RO",Entretenimento
+11,Monteiro,83.459.670/0001-06,+55 11 0793 1504,gbarbosa@example.net,8223,"Largo de Ramos, 68
+Nossa Senhora Aparecida
+38837908 Caldeira da Praia / ES",Outros
+12,Viana Abreu - ME,95.682.170/0001-00,+55 21 7147-0243,vitor-gabrielcassiano@example.org,10115,"Pátio Nascimento, 396
+Mariquinhas
+10095276 Fogaça Grande / SC",PetShop
+13,Leão,40.351.892/0001-90,+55 (084) 2724-5187,gabriel52@example.com,6231,"Campo Silveira, 4
+Novo Glória
+74799222 Castro de Goiás / MG",Entretenimento
+14,Castro Duarte e Filhos,86.735.490/0001-90,+55 (071) 6434-4461,pastornathan@example.org,12149,"Lagoa de Brito, 2
+Granja De Freitas
+16716815 Freitas / RN",Design
+15,Jesus,56.428.091/0001-15,0500 088 7299,camargomurilo@example.org,6094,"Praça Silva, 311
+Concórdia
+51645-716 Martins da Serra / SP",Ensino
+16,Barros,43.026.759/0001-56,84 1702 6149,luiza79@example.com,12029,"Aeroporto Otávio Viana, 32
+Rio Branco
+14696620 Nunes / RS",Advocacia
+17,Siqueira,87.496.350/0001-79,+55 (021) 5415 8477,dcastro@example.org,4039,"Lagoa Maria Alice Cassiano, 94
+Goiania
+15795301 Gomes de da Costa / SE",Entretenimento
+18,Garcia Silva - EI,32.869.741/0001-08,(011) 4631 1299,da-rochaluiz-felipe@example.org,4169,"Aeroporto de Nunes, 34
+Nova Suíça
+46437712 da Cunha da Mata / RN",Eventos
+19,Carvalho,67.128.945/0001-64,+55 71 6408-7454,qramos@example.net,12270,"Viela Ana Cecília Silva, 2
+Vila Sumaré
+76428661 Porto do Campo / AC",Design
+20,Gonçalves,39.647.180/0001-33,(011) 2385 9381,garaujo@example.org,2423,"Setor de Ferreira, 7
+Lindéia
+54057556 Rezende / RR",Outros
+21,Nascimento,57.408.123/0001-83,(021) 7537-9584,igor79@example.com,18571,"Travessa de Campos, 47
+Sion
+02730001 Albuquerque / PE",Advocacia
+22,Barbosa,42.851.970/0001-40,11 6094-4835,hgomes@example.net,13403,"Lago Heitor Nascimento, 7
+Alta Tensão 1ª Seção
+57745-839 Costa / RJ",Advocacia
+23,Pimenta,15.762.034/0001-90,+55 21 9793 8939,riosemanuel@example.org,19089,"Largo de Campos, 89
+Lorena
+44592813 Sales de Castro / ES",Design
+24,Jesus Câmara - EI,71.605.439/0001-96,21 5059 1685,thales54@example.com,12850,"Trecho de Melo, 4
+Santa Rosa
+56700285 Cavalcante da Prata / MT",Ensino
+25,Viana,26.713.085/0001-49,+55 (051) 0969 2945,joaoribeiro@example.com,3279,"Área Mateus Pinto, 82
+Piratininga
+00921-905 Silva / PI",PetShop
+26,Novaes,63.927.185/0001-02,0300 434 9079,vmelo@example.com,8467,"Ladeira de Souza, 95
+Dom Bosco
+79281658 Novaes / SE",Design
+27,Barbosa,02.681.734/0001-09,(084) 5816 6324,rodrigueshenry@example.net,3614,"Trevo da Conceição
+Cenaculo
+37885-688 Castro / MS",Ensino
+28,Castro Dias e Filhos,13.640.592/0001-58,+55 (081) 7799 8673,agatha83@example.org,4309,"Alameda de Caldeira, 33
+Bela Vitoria
+86483476 Pimenta / AL",Entretenimento
+29,Andrade,61.923.057/0001-57,71 7294-5637,imelo@example.org,10108,"Viela Pimenta
+Jardim Vitoria
+99473761 Câmara / SC",Outros
+30,Martins Ltda.,91.520.483/0001-00,81 7452 7706,henry43@example.com,12954,"Conjunto Theo da Cunha, 70
+Paquetá
+54603-917 Araújo do Norte / AC",E-commerce
