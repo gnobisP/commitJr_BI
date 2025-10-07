@@ -1,81 +1,82 @@
 import pandas as pd
-from dash import Dash, dcc, html, Input, Output
+from dash import Dash, dcc, html, Input, Output, callback_context
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
 import numpy as np
 
-# --- CARREGAR DADOS ---
+# --- CARREGAR DADOS DA EMPRESA JUNIOR ---
 try:
-    orders = pd.read_csv('data/olist_orders_dataset.csv', parse_dates=['order_purchase_timestamp'])
-    customers = pd.read_csv('data/olist_customers_dataset.csv')
-    order_items = pd.read_csv('data/olist_order_items_dataset.csv')
-    products = pd.read_csv('data/olist_products_dataset.csv')
-    sellers = pd.read_csv('data/olist_sellers_dataset.csv')
-    payments = pd.read_csv('data/olist_order_payments_dataset.csv')
+    # Dados da Empresa Junior
+    areas = pd.read_csv('fake_data/area_projeto.csv')
+    empresas = pd.read_csv('fake_data/empresa.csv')
+    pessoas = pd.read_csv('fake_data/pessoa.csv')
+    servicos = pd.read_csv('fake_data/servico.csv', parse_dates=['data_inicio', 'data_fim'])
+    despesas = pd.read_csv('fake_data/despesa.csv', parse_dates=['data'])
+    tributos = pd.read_csv('fake_data/tributo.csv')
+    
+    print("✅ Dados da Empresa Junior carregados com sucesso!")
+    print(f"📊 {len(servicos)} serviços, {len(empresas)} empresas, {len(despesas)} despesas")
+    
 except FileNotFoundError as e:
-    print(f"Arquivo não encontrado: {e}")
-    print("Certifique-se que a pasta 'data' existe com todos os arquivos CSV.")
+    print(f"❌ Arquivo não encontrado: {e}")
+    print("Certifique-se que a pasta 'fake_data' existe com todos os arquivos CSV.")
     exit()
 
-# --- PREPARAÇÃO E JUNÇÃO ---
-# Unir orders + customers (para ter estado)
-data = orders.merge(customers, on='customer_id', how='left')
+# --- PREPARAÇÃO DOS DADOS ---
+# Juntar serviços com áreas
+data = servicos.merge(areas, on='id_area', how='left')
 
-# Unir orders + order_items para receita
-order_items['price'] = pd.to_numeric(order_items['price'], errors='coerce').fillna(0)
-order_items['freight_value'] = pd.to_numeric(order_items['freight_value'], errors='coerce').fillna(0)
-order_revenue = order_items.groupby('order_id').agg({
-    'price': 'sum',
-    'freight_value': 'sum',
-    'product_id': 'count'
+# Juntar com empresas (quando há empresa)
+data = data.merge(empresas[['id_empresa', 'nome', 'area_empresa', 'capital_social']], 
+                 left_on='id_empresa', right_on='id_empresa', how='left', suffixes=('', '_empresa'))
+
+# Juntar com pessoas (quando há pessoa)
+data = data.merge(pessoas[['id_pessoa', 'nome']], 
+                 left_on='id_pessoa', right_on='id_pessoa', how='left', suffixes=('', '_pessoa'))
+
+# Adicionar tributos agregados por serviço
+tributos_agg = tributos.groupby('id_servico').agg({
+    'percentual': ['sum', 'mean', 'count']
 }).reset_index()
-order_revenue['total_value'] = order_revenue['price'] + order_revenue['freight_value']
-order_revenue = order_revenue.rename(columns={'product_id': 'items_count'})
+tributos_agg.columns = ['id_servico', 'total_tributos', 'media_tributos', 'qtd_tributos']
 
-data = data.merge(order_revenue, on='order_id', how='left')
+data = data.merge(tributos_agg, on='id_servico', how='left')
 
-# Unir com produtos para categorias
-order_items_with_products = order_items.merge(products[['product_id', 'product_category_name']], on='product_id', how='left')
+# Preencher valores nulos
+data['total_tributos'] = data['total_tributos'].fillna(0)
+data['media_tributos'] = data['media_tributos'].fillna(0)
+data['qtd_tributos'] = data['qtd_tributos'].fillna(0)
 
-# Unir com pagamentos
-if 'payments' in locals():
-    payments['payment_value'] = pd.to_numeric(payments['payment_value'], errors='coerce').fillna(0)
-    payment_summary = payments.groupby('order_id').agg({
-        'payment_value': 'sum',
-        'payment_type': 'first',
-        'payment_installments': 'mean'
-    }).reset_index()
-    data = data.merge(payment_summary, on='order_id', how='left')
+# Calcular valor líquido (valor - tributos estimados)
+data['valor_tributos_estimado'] = data['valor'] * (data['total_tributos'] / 100)
+data['valor_liquido'] = data['valor'] - data['valor_tributos_estimado']
 
 # Criar colunas auxiliares para data
-data['order_month'] = data['order_purchase_timestamp'].dt.to_period('M').dt.to_timestamp()
-data['order_year'] = data['order_purchase_timestamp'].dt.year
-data['order_quarter'] = data['order_purchase_timestamp'].dt.quarter
-data['order_weekday'] = data['order_purchase_timestamp'].dt.day_name()
+data['mes_inicio'] = data['data_inicio'].dt.to_period('M').dt.to_timestamp()
+data['ano_inicio'] = data['data_inicio'].dt.year
+data['trimestre_inicio'] = data['data_inicio'].dt.quarter
 
-# --- CONFIGURAÇÕES DE ESTILO ---
+# Definir cores do tema EJ
 COLORS = {
-    'primary': '#2E86AB',        # Azul principal
-    'secondary': '#A23B72',      # Azul secundário  
-    'accent': '#F18F01',         # Laranja para destaques
-    'success': '#C73E1D',        # Verde
-    'background': '#F8F9FA',     # Cinza muito claro
+    'primary': '#1E40AF',        # Azul EJ
+    'secondary': '#7C3AED',      # Roxo
+    'accent': '#F59E0B',         # Amarelo/Laranja
+    'success': '#10B981',        # Verde
+    'danger': '#EF4444',         # Vermelho 
+    'background': '#F8FAFC',     # Cinza muito claro
     'card_bg': '#FFFFFF',        # Branco
-    'text': '#2C3E50',          # Azul escuro para texto
-    'border': '#E1E8ED',        # Cinza claro para bordas
-    'gradient_start': '#2E86AB', # Início do gradiente
-    'gradient_end': '#A23B72'    # Fim do gradiente
+    'text': '#1F2937',          # Cinza escuro
+    'border': '#E5E7EB',        # Cinza claro
+    'gradient_start': '#1E40AF',
+    'gradient_end': '#7C3AED'
 }
 
-# Estilo global
-external_stylesheets = ['https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css']
-
 # --- DASH APP ---
-app = Dash(__name__, external_stylesheets=external_stylesheets)
-app.title = "Dashboard EJ - Análise Financeira"
+app = Dash(__name__)
+app.title = "Dashboard Empresa Junior - Análise Financeira"
 
-# Estilo CSS customizado
+# Estilo CSS customizado para EJ
 app.index_string = '''
 <!DOCTYPE html>
 <html>
@@ -84,110 +85,175 @@ app.index_string = '''
         <title>{%title%}</title>
         {%favicon%}
         {%css%}
+        <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
         <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+            
             body {
-                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                background-color: #F8F9FA;
+                font-family: 'Inter', system-ui, -apple-system, sans-serif;
+                background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
                 margin: 0;
                 padding: 0;
+                min-height: 100vh;
             }
+            
             .header {
-                background: linear-gradient(135deg, #1E3A8A 0%, #2E86AB 40%, #60A5FA 100%);
+                background: linear-gradient(135deg, #1E40AF 0%, #3B82F6 50%, #7C3AED 100%);
                 color: white;
-                padding: 2.5rem 0;
+                padding: 3rem 0;
                 margin-bottom: 2rem;
-                box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            }
-            .kpi-card {
-                background: white;
-                padding: 1.8rem;
-                border-radius: 15px;
-                box-shadow: 0 3px 15px rgba(0,0,0,0.08);
-                margin: 0 10px;
-                transition: all 0.3s ease;
-                border-left: 5px solid #2E86AB;
+                box-shadow: 0 8px 32px rgba(30,64,175,0.15);
                 position: relative;
                 overflow: hidden;
             }
+            
+            .header::before {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 100"><path d="M0,20 Q250,60 500,20 T1000,20 L1000,100 L0,100 Z" fill="rgba(255,255,255,0.1)"/></svg>') repeat-x bottom;
+                background-size: 100% 50px;
+            }
+            
+            .kpi-card {
+                background: white;
+                padding: 2rem;
+                border-radius: 16px;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+                margin: 0 10px;
+                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                border-left: 4px solid #1E40AF;
+                position: relative;
+                overflow: hidden;
+            }
+            
             .kpi-card::before {
                 content: '';
                 position: absolute;
                 top: 0;
                 right: 0;
-                width: 100px;
-                height: 100px;
-                background: linear-gradient(45deg, rgba(30,58,138,0.08), rgba(46,134,171,0.12));
+                width: 80px;
+                height: 80px;
+                background: linear-gradient(45deg, rgba(30,64,175,0.1), rgba(124,58,237,0.15));
                 border-radius: 50%;
-                transform: translate(30px, -30px);
+                transform: translate(25px, -25px);
             }
+            
             .kpi-card:hover {
-                transform: translateY(-3px);
-                box-shadow: 0 6px 25px rgba(0,0,0,0.12);
+                transform: translateY(-4px);
+                box-shadow: 0 8px 40px rgba(0,0,0,0.12);
+                border-left-color: #7C3AED;
             }
+            
             .kpi-value {
-                font-size: 2.2rem;
-                font-weight: bold;
-                margin: 0.5rem 0;
-                color: #2C3E50;
+                font-size: 2.5rem;
+                font-weight: 700;
+                margin: 0.8rem 0;
+                color: #1F2937;
                 position: relative;
                 z-index: 2;
+                line-height: 1.1;
             }
+            
             .kpi-label {
-                font-size: 0.85rem;
-                color: #6C757D;
+                font-size: 0.875rem;
+                color: #6B7280;
                 text-transform: uppercase;
-                letter-spacing: 1.2px;
+                letter-spacing: 1px;
                 margin: 0;
                 font-weight: 600;
                 position: relative;
                 z-index: 2;
             }
+            
             .kpi-icon {
-                font-size: 2.2rem;
+                font-size: 2.5rem;
                 opacity: 0.8;
                 position: absolute;
-                top: 1.8rem;
-                right: 1.8rem;
+                top: 2rem;
+                right: 2rem;
                 z-index: 2;
             }
+            
             .chart-container {
                 background: white;
-                padding: 2rem;
-                border-radius: 15px;
-                box-shadow: 0 3px 15px rgba(0,0,0,0.08);
+                padding: 2.5rem;
+                border-radius: 16px;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.08);
                 margin: 1.5rem 0;
+                border: 1px solid #F3F4F6;
             }
+            
             .filters-container {
                 background: white;
-                padding: 2rem;
-                border-radius: 15px;
-                box-shadow: 0 3px 15px rgba(0,0,0,0.08);
+                padding: 2.5rem;
+                border-radius: 16px;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.08);
                 margin-bottom: 2rem;
+                border: 1px solid #F3F4F6;
             }
+            
             .section-title {
-                color: #2C3E50;
-                font-size: 1.3rem;
-                font-weight: 600;
-                margin: 0 0 25px 0;
-                padding-bottom: 10px;
-                border-bottom: 2px solid #E1E8ED;
+                color: #1F2937;
+                font-size: 1.4rem;
+                font-weight: 700;
+                margin: 0 0 30px 0;
+                padding-bottom: 12px;
+                border-bottom: 3px solid #E5E7EB;
+                position: relative;
             }
+            
+            .section-title::after {
+                content: '';
+                position: absolute;
+                bottom: -3px;
+                left: 0;
+                width: 60px;
+                height: 3px;
+                background: linear-gradient(90deg, #1E40AF, #7C3AED);
+                border-radius: 2px;
+            }
+            
             .metric-change {
-                font-size: 0.8rem;
-                margin-top: 8px;
-                font-weight: 500;
+                font-size: 0.875rem;
+                margin-top: 10px;
+                font-weight: 600;
+                display: flex;
+                align-items: center;
+                gap: 4px;
             }
-            .metric-up { color: #28A745; }
-            .metric-down { color: #DC3545; }
+            
+            .metric-up { color: #10B981; }
+            .metric-down { color: #EF4444; }
+            .metric-neutral { color: #6B7280; }
+            
             .filter-group {
-                margin-bottom: 20px;
+                margin-bottom: 24px;
             }
+            
             .filter-label {
                 font-weight: 600;
-                margin-bottom: 8px;
+                margin-bottom: 10px;
                 display: block;
-                color: #495057;
+                color: #374151;
+                font-size: 0.95rem;
             }
+            
+            .status-badge {
+                padding: 6px 12px;
+                border-radius: 20px;
+                font-size: 0.8rem;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+            
+            .status-concluido { background: #D1FAE5; color: #065F46; }
+            .status-andamento { background: #DBEAFE; color: #1E40AF; }
+            .status-cancelado { background: #FEE2E2; color: #991B1B; }
         </style>
     </head>
     <body>
@@ -206,16 +272,19 @@ app.layout = html.Div([
     html.Div([
         html.Div([
             html.H1([
-                html.I(className="fas fa-chart-line", style={'marginRight': '15px'}),
-                "Dashboard EJ - Análise Financeira"
+                html.I(className="fas fa-chart-line", style={'marginRight': '20px'}),
+                "Dashboard Empresa Junior"
             ], style={
                 'textAlign': 'center', 
                 'margin': '0', 
-                'fontSize': '2.8rem',
-                'fontWeight': '300'
+                'fontSize': '3rem',
+                'fontWeight': '700',
+                'position': 'relative',
+                'zIndex': '10'
             }),
-            html.P("Análise completa de vendas e performance da Empresa Junior", 
-                   style={'textAlign': 'center', 'margin': '15px 0 0 0', 'opacity': '0.9', 'fontSize': '1.1rem'})
+            html.P("Análise completa de projetos, receitas e performance financeira", 
+                   style={'textAlign': 'center', 'margin': '20px 0 0 0', 'opacity': '0.95', 
+                         'fontSize': '1.2rem', 'position': 'relative', 'zIndex': '10'})
         ])
     ], className="header"),
     
@@ -224,40 +293,43 @@ app.layout = html.Div([
         # Filtros
         html.Div([
             html.H3([
-                html.I(className="fas fa-sliders-h", style={'marginRight': '12px'}),
-                "Controles de Análise"
+                html.I(className="fas fa-filter", style={'marginRight': '12px'}),
+                "Filtros de Análise"
             ], className="section-title"),
             
             html.Div([
                 html.Div([
                     html.Label("Período de Análise:", className="filter-label"),
-                    html.P("💡 As variações são calculadas comparando com o período anterior de mesmo tamanho", 
-                           style={'fontSize': '0.8rem', 'color': '#6C757D', 'margin': '5px 0 10px 0', 'fontStyle': 'italic'}),
                     dcc.DatePickerRange(
-                        id='date-range',
-                        min_date_allowed=data['order_purchase_timestamp'].min(),
-                        max_date_allowed=data['order_purchase_timestamp'].max(),
-                        start_date=data['order_purchase_timestamp'].min(),
-                        end_date=data['order_purchase_timestamp'].max(),
+                        id='date-range-ej',
+                        min_date_allowed=data['data_inicio'].min(),
+                        max_date_allowed=data['data_inicio'].max(),
+                        start_date=data['data_inicio'].min(),
+                        end_date=data['data_inicio'].max(),
                         display_format='DD/MM/YYYY',
-                        style={'width': '100%'},
-                        start_date_placeholder_text="Data inicial",
-                        end_date_placeholder_text="Data final"
+                        style={'width': '100%'}
                     )
                 ], className="filter-group", style={'flex': '1', 'marginRight': '20px'}),
                 
                 html.Div([
-                    html.Label("Agrupamento Temporal:", className="filter-label"),
+                    html.Label("Área de Projeto:", className="filter-label"),
                     dcc.Dropdown(
-                        id='time-grouping',
-                        options=[
-                            {'label': '📅 Mensal', 'value': 'month'},
-                            {'label': '📊 Trimestral', 'value': 'quarter'},
-                            {'label': '📈 Anual', 'value': 'year'}
-                        ],
-                        value='month',
-                        clearable=False,
-                        style={'width': '100%'}
+                        id='area-filter',
+                        options=[{'label': 'Todas as Áreas', 'value': 'all'}] + 
+                               [{'label': area, 'value': area} for area in data['nome_area'].unique()],
+                        value='all',
+                        clearable=False
+                    )
+                ], className="filter-group", style={'flex': '1', 'marginRight': '20px'}),
+                
+                html.Div([
+                    html.Label("Status do Projeto:", className="filter-label"),
+                    dcc.Dropdown(
+                        id='status-filter',
+                        options=[{'label': 'Todos os Status', 'value': 'all'}] + 
+                               [{'label': status, 'value': status} for status in data['status'].unique()],
+                        value='all',
+                        clearable=False
                     )
                 ], className="filter-group", style={'flex': '1'})
             ], style={'display': 'flex', 'alignItems': 'end'})
@@ -266,15 +338,15 @@ app.layout = html.Div([
         # KPIs principais
         html.Div([
             html.H3([
-                html.I(className="fas fa-tachometer-alt", style={'marginRight': '12px'}),
-                "Indicadores de Performance"
+                html.I(className="fas fa-chart-bar", style={'marginRight': '12px'}),
+                "Indicadores Principais"
             ], className="section-title"),
             
             html.Div([
-                html.Div(id='total-revenue', style={'flex': '1'}),
-                html.Div(id='total-orders', style={'flex': '1'}),
-                html.Div(id='avg-ticket', style={'flex': '1'}),
-                html.Div(id='total-customers', style={'flex': '1'}),
+                html.Div(id='total-receita-ej', style={'flex': '1'}),
+                html.Div(id='total-projetos-ej', style={'flex': '1'}),
+                html.Div(id='ticket-medio-ej', style={'flex': '1'}),
+                html.Div(id='total-empresas-ej', style={'flex': '1'}),
             ], style={
                 'display': 'flex', 
                 'gap': '20px',
@@ -283,17 +355,17 @@ app.layout = html.Div([
             })
         ]),
 
-        # KPIs secundários
+        # KPIs operacionais
         html.Div([
             html.H3([
-                html.I(className="fas fa-chart-pie", style={'marginRight': '12px'}),
+                html.I(className="fas fa-cogs", style={'marginRight': '12px'}),
                 "Métricas Operacionais"
             ], className="section-title"),
             
             html.Div([
-                html.Div(id='avg-items', style={'flex': '1'}),
-                html.Div(id='avg-freight', style={'flex': '1'}),
-                html.Div(id='conversion-rate', style={'flex': '1'}),
+                html.Div(id='receita-liquida-ej', style={'flex': '1'}),
+                html.Div(id='tributos-totais-ej', style={'flex': '1'}),
+                html.Div(id='taxa-conclusao-ej', style={'flex': '1'}),
             ], style={
                 'display': 'flex', 
                 'gap': '20px',
@@ -305,29 +377,44 @@ app.layout = html.Div([
         # Gráficos principais
         html.Div([
             html.Div([
-                dcc.Graph(id='revenue-trend')
-            ], className="chart-container", style={'marginBottom': '20px'}),
+                dcc.Graph(id='receita-evolucao-ej')
+            ], className="chart-container"),
 
             html.Div([
                 html.Div([
-                    dcc.Graph(id='orders-by-state')
+                    dcc.Graph(id='projetos-area-ej')
                 ], style={'flex': '1', 'marginRight': '10px'}),
                 
                 html.Div([
-                    dcc.Graph(id='payment-methods')
+                    dcc.Graph(id='status-projetos-ej')
                 ], style={'flex': '1', 'marginLeft': '10px'})
             ], style={'display': 'flex', 'gap': '20px'}, className="chart-container"),
 
             html.Div([
                 html.Div([
-                    dcc.Graph(id='category-analysis')
+                    dcc.Graph(id='empresas-areas-ej')
                 ], style={'flex': '1', 'marginRight': '10px'}),
                 
                 html.Div([
-                    dcc.Graph(id='weekday-pattern')
+                    dcc.Graph(id='tributos-analise-ej')
                 ], style={'flex': '1', 'marginLeft': '10px'})
             ], style={'display': 'flex', 'gap': '20px'}, className="chart-container"),
         ])
+    ], style={
+        'maxWidth': '1400px', 
+        'margin': '0 auto', 
+        'padding': '0 20px'
+    }),
+    
+    # Seção de despesas
+    html.Div([
+        html.Div([
+            html.H3([
+                html.I(className="fas fa-money-bill-wave", style={'marginRight': '12px'}),
+                "Análise de Despesas"
+            ], className="section-title"),
+            dcc.Graph(id='despesas-analise-ej')
+        ], className="chart-container")
     ], style={
         'maxWidth': '1400px', 
         'margin': '0 auto', 
@@ -337,276 +424,178 @@ app.layout = html.Div([
 
 # --- CALLBACKS ---
 @app.callback(
-    [Output('total-revenue', 'children'),
-     Output('total-orders', 'children'),
-     Output('avg-ticket', 'children'),
-     Output('total-customers', 'children'),
-     Output('avg-items', 'children'),
-     Output('avg-freight', 'children'),
-     Output('conversion-rate', 'children'),
-     Output('revenue-trend', 'figure'),
-     Output('orders-by-state', 'figure'),
-     Output('payment-methods', 'figure'),
-     Output('category-analysis', 'figure'),
-     Output('weekday-pattern', 'figure')],
-    [Input('date-range', 'start_date'),
-     Input('date-range', 'end_date'),
-     Input('time-grouping', 'value')]
+    [Output('total-receita-ej', 'children'),
+     Output('total-projetos-ej', 'children'),
+     Output('ticket-medio-ej', 'children'),
+     Output('total-empresas-ej', 'children'),
+     Output('receita-liquida-ej', 'children'),
+     Output('tributos-totais-ej', 'children'),
+     Output('taxa-conclusao-ej', 'children'),
+     Output('receita-evolucao-ej', 'figure'),
+     Output('projetos-area-ej', 'figure'),
+     Output('status-projetos-ej', 'figure'),
+     Output('empresas-areas-ej', 'figure'),
+     Output('tributos-analise-ej', 'figure'),
+     Output('despesas-analise-ej', 'figure')],
+    [Input('date-range-ej', 'start_date'),
+     Input('date-range-ej', 'end_date'),
+     Input('area-filter', 'value'),
+     Input('status-filter', 'value')]
 )
-def update_dashboard(start_date, end_date, time_grouping):
-    # Filtrar dados do período atual
-    filtered = data[(data['order_purchase_timestamp'] >= start_date) & 
-                   (data['order_purchase_timestamp'] <= end_date)]
+def update_dashboard_ej(start_date, end_date, area_filter, status_filter):
+    # Filtrar dados
+    filtered = data.copy()
     
-    # Calcular período anterior para comparação (mesmo tamanho do período atual)
-    start_dt = pd.to_datetime(start_date)
-    end_dt = pd.to_datetime(end_date)
-    date_diff = end_dt - start_dt
+    # Filtro de data
+    filtered = filtered[(filtered['data_inicio'] >= start_date) & 
+                       (filtered['data_inicio'] <= end_date)]
     
-    prev_start = start_dt - date_diff
-    prev_end = start_dt
+    # Filtro de área
+    if area_filter != 'all':
+        filtered = filtered[filtered['nome_area'] == area_filter]
     
-    prev_data = data[(data['order_purchase_timestamp'] >= prev_start) & 
-                    (data['order_purchase_timestamp'] < prev_end)]
+    # Filtro de status
+    if status_filter != 'all':
+        filtered = filtered[filtered['status'] == status_filter]
 
-    print(f"📅 Período atual: {start_date} a {end_date} ({len(filtered)} registros)")
-    print(f"📅 Período anterior: {prev_start.date()} a {prev_end.date()} ({len(prev_data)} registros)")
-
-    # Métricas principais
-    total_revenue = filtered['price'].sum()
-    prev_revenue = prev_data['price'].sum() if len(prev_data) > 0 else 0
-    revenue_change = ((total_revenue - prev_revenue) / prev_revenue * 100) if prev_revenue > 0 else 0
+    # --- MÉTRICAS ---
+    total_receita = filtered['valor'].sum()
+    total_projetos = len(filtered)
+    ticket_medio = total_receita / total_projetos if total_projetos > 0 else 0
+    total_empresas = filtered['id_empresa'].nunique()
     
-    total_orders = filtered['order_id'].nunique()
-    prev_orders = prev_data['order_id'].nunique() if len(prev_data) > 0 else 0
-    orders_change = ((total_orders - prev_orders) / prev_orders * 100) if prev_orders > 0 else 0
+    receita_liquida = filtered['valor_liquido'].sum()
+    tributos_totais = filtered['valor_tributos_estimado'].sum()
     
-    avg_ticket = total_revenue / total_orders if total_orders else 0
-    prev_avg_ticket = prev_revenue / prev_orders if prev_orders else 0
-    ticket_change = ((avg_ticket - prev_avg_ticket) / prev_avg_ticket * 100) if prev_avg_ticket > 0 else 0
-    
-    total_customers = filtered['customer_id'].nunique()
-    prev_customers = prev_data['customer_id'].nunique() if len(prev_data) > 0 else 0
-    customers_change = ((total_customers - prev_customers) / prev_customers * 100) if prev_customers > 0 else 0
-    
-    # Debug das variações
-    print(f"💰 Receita: R$ {total_revenue:.2f} (era R$ {prev_revenue:.2f}) = {revenue_change:+.1f}%")
-    print(f"🛒 Pedidos: {total_orders} (eram {prev_orders}) = {orders_change:+.1f}%")
-    
-    # Métricas operacionais
-    avg_items = filtered['items_count'].mean() if len(filtered) > 0 else 0
-    avg_freight = filtered['freight_value'].mean() if len(filtered) > 0 else 0
-    conversion_rate = (total_orders / total_customers * 100) if total_customers > 0 else 0
+    projetos_concluidos = len(filtered[filtered['status'] == 'Concluído'])
+    taxa_conclusao = (projetos_concluidos / total_projetos * 100) if total_projetos > 0 else 0
 
     # Função para criar KPI card
-    def create_kpi_card(title, value, icon, color, change=None, prefix="", suffix=""):
-        change_element = []
-        if change is not None:
-            change_class = "metric-up" if change >= 0 else "metric-down"
-            change_icon = "fas fa-arrow-up" if change >= 0 else "fas fa-arrow-down"
-            change_element = [
-                html.Div([
-                    html.I(className=change_icon, style={'marginRight': '5px'}),
-                    f"{change:+.1f}% vs período anterior"
-                ], className=f"metric-change {change_class}")
-            ]
-        
+    def create_kpi_card_ej(title, value, icon, color, prefix="", suffix=""):
         return html.Div([
             html.I(className=f"{icon} kpi-icon", style={'color': color}),
             html.H4(title, className="kpi-label"),
             html.H2(f"{prefix}{value}{suffix}", className="kpi-value"),
-            *change_element
         ], className="kpi-card")
 
     # KPI Cards
-    kpi_revenue = create_kpi_card(
+    kpi_receita = create_kpi_card_ej(
         "Receita Total", 
-        f"{total_revenue:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'),
-        "fas fa-dollar-sign", COLORS['success'], revenue_change, "R$ "
+        f"{total_receita:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'),
+        "fas fa-dollar-sign", COLORS['success'], "R$ "
     )
 
-    kpi_orders = create_kpi_card(
-        "Total de Pedidos", 
-        f"{total_orders:,}".replace(',', '.'),
-        "fas fa-shopping-cart", COLORS['primary'], orders_change
+    kpi_projetos = create_kpi_card_ej(
+        "Total de Projetos", 
+        f"{total_projetos:,}".replace(',', '.'),
+        "fas fa-project-diagram", COLORS['primary']
     )
 
-    kpi_avg_ticket = create_kpi_card(
+    kpi_ticket = create_kpi_card_ej(
         "Ticket Médio", 
-        f"{avg_ticket:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'),
-        "fas fa-receipt", COLORS['secondary'], ticket_change, "R$ "
+        f"{ticket_medio:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'),
+        "fas fa-receipt", COLORS['secondary'], "R$ "
     )
     
-    kpi_customers = create_kpi_card(
-        "Clientes Únicos", 
-        f"{total_customers:,}".replace(',', '.'),
-        "fas fa-users", COLORS['accent'], customers_change
+    kpi_empresas = create_kpi_card_ej(
+        "Empresas Clientes", 
+        f"{total_empresas:,}".replace(',', '.'),
+        "fas fa-building", COLORS['accent']
     )
     
-    kpi_avg_items = create_kpi_card(
-        "Itens por Pedido", 
-        f"{avg_items:.1f}",
-        "fas fa-boxes", COLORS['primary']
+    kpi_liquida = create_kpi_card_ej(
+        "Receita Líquida", 
+        f"{receita_liquida:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'),
+        "fas fa-hand-holding-usd", COLORS['success'], "R$ "
     )
     
-    kpi_avg_freight = create_kpi_card(
-        "Frete Médio", 
-        f"{avg_freight:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'),
-        "fas fa-truck", COLORS['secondary'], None, "R$ "
+    kpi_tributos = create_kpi_card_ej(
+        "Tributos Totais", 
+        f"{tributos_totais:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.'),
+        "fas fa-file-invoice-dollar", COLORS['danger'], "R$ "
     )
     
-    kpi_conversion = create_kpi_card(
-        "Taxa de Conversão", 
-        f"{conversion_rate:.1f}",
-        "fas fa-percentage", COLORS['success'], None, "", "%"
-    )
-
-    # Gráfico de tendência de receita
-    if time_grouping == 'month':
-        period_col = 'order_month'
-        title_suffix = "Mensal"
-    elif time_grouping == 'quarter':
-        filtered['period'] = filtered['order_purchase_timestamp'].dt.to_period('Q').dt.to_timestamp()
-        period_col = 'period'
-        title_suffix = "Trimestral"
-    else:  # year
-        filtered['period'] = filtered['order_purchase_timestamp'].dt.to_period('Y').dt.to_timestamp()
-        period_col = 'period'
-        title_suffix = "Anual"
-    
-    trend_data = (filtered.groupby(period_col)
-                  .agg({'price': 'sum', 'order_id': 'nunique'})
-                  .reset_index())
-    
-    fig_trend = go.Figure()
-    fig_trend.add_trace(go.Scatter(
-        x=trend_data[period_col], 
-        y=trend_data['price'],
-        mode='lines+markers',
-        name='Receita',
-        line=dict(width=3, color=COLORS['primary']),
-        marker=dict(size=8, color=COLORS['primary'])
-    ))
-    
-    fig_trend.update_layout(
-        title=f'📈 Evolução da Receita {title_suffix}',
-        title_font_size=18,
-        title_x=0.02,
-        template='plotly_white',
-        hovermode='x unified',
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        showlegend=False
+    kpi_conclusao = create_kpi_card_ej(
+        "Taxa de Conclusão", 
+        f"{taxa_conclusao:.1f}",
+        "fas fa-check-circle", COLORS['success'], "", "%"
     )
 
-    # Gráfico de pedidos por estado (Top 10)
-    state_orders = (filtered.groupby('customer_state')
-                    .agg({'order_id': 'nunique'})
-                    .reset_index()
-                    .rename(columns={'order_id': 'pedidos'})
-                    .sort_values('pedidos', ascending=True)
-                    .tail(10))
+    # --- GRÁFICOS ---
     
-    fig_state = px.bar(state_orders, 
-                      x='pedidos', 
-                      y='customer_state',
-                      orientation='h',
-                      title='🗺️ Top 10 Estados',
+    # 1. Evolução da Receita
+    receita_mensal = filtered.groupby('mes_inicio')['valor'].sum().reset_index()
+    
+    fig_evolucao = px.line(receita_mensal, x='mes_inicio', y='valor',
+                          title='💹 Evolução da Receita Mensal',
+                          template='plotly_white')
+    fig_evolucao.update_traces(line=dict(color=COLORS['primary'], width=3))
+    fig_evolucao.update_layout(title_font_size=18, title_x=0.02)
+
+    # 2. Projetos por Área
+    area_data = filtered.groupby('nome_area').size().reset_index(name='quantidade')
+    
+    fig_areas = px.bar(area_data, x='quantidade', y='nome_area', orientation='h',
+                      title='🎯 Projetos por Área',
                       template='plotly_white',
-                      color='pedidos',
+                      color='quantidade',
                       color_continuous_scale=[[0, COLORS['primary']], [1, COLORS['secondary']]])
-    
-    fig_state.update_layout(
-        title_font_size=16,
-        title_x=0.02,
-        showlegend=False,
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        height=400
-    )
+    fig_areas.update_layout(title_font_size=16, title_x=0.02, showlegend=False)
 
-    # Gráfico de métodos de pagamento
-    if 'payment_type' in filtered.columns:
-        payment_data = filtered['payment_type'].value_counts().head(6)
-        fig_payment = px.pie(
-            values=payment_data.values,
-            names=payment_data.index,
-            title='💳 Métodos de Pagamento',
-            template='plotly_white',
-            color_discrete_sequence=[COLORS['primary'], COLORS['secondary'], COLORS['accent'], COLORS['success']]
-        )
-    else:
-        fig_payment = px.pie(values=[1], names=['Dados não disponíveis'], title='💳 Métodos de Pagamento')
+    # 3. Status dos Projetos
+    status_data = filtered['status'].value_counts()
+    colors_status = {
+        'Concluído': COLORS['success'],
+        'Em andamento': COLORS['primary'], 
+        'Cancelado': COLORS['danger']
+    }
     
-    fig_payment.update_layout(
-        title_font_size=16,
-        title_x=0.02,
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        height=400
-    )
+    fig_status = px.pie(values=status_data.values, names=status_data.index,
+                       title='📊 Status dos Projetos',
+                       template='plotly_white',
+                       color=status_data.index,
+                       color_discrete_map=colors_status)
+    fig_status.update_layout(title_font_size=16, title_x=0.02)
 
-    # Análise por categoria (simulada - usando dados disponíveis)
-    category_data = pd.DataFrame({
-        'categoria': ['Eletrônicos', 'Casa & Jardim', 'Esporte', 'Moda', 'Livros', 'Outros'],
-        'vendas': np.random.randint(50, 500, 6)  # Dados simulados
-    }).sort_values('vendas', ascending=True)
+    # 4. Empresas por Área de Atuação
+    empresa_area = filtered.dropna(subset=['area_empresa']).groupby('area_empresa').size().reset_index(name='quantidade')
     
-    fig_category = px.bar(category_data,
-                         x='vendas',
-                         y='categoria',
-                         orientation='h',
-                         title='🛍️ Vendas por Categoria',
+    fig_emp_areas = px.bar(empresa_area, x='area_empresa', y='quantidade',
+                          title='🏢 Clientes por Área de Atuação',
+                          template='plotly_white',
+                          color='quantidade',
+                          color_continuous_scale=[[0, COLORS['accent']], [1, COLORS['primary']]])
+    fig_emp_areas.update_layout(title_font_size=16, title_x=0.02, showlegend=False)
+    fig_emp_areas.update_xaxes(tickangle=45)
+
+    # 5. Análise de Tributos
+    tributos_area = filtered.groupby('nome_area')['total_tributos'].mean().reset_index()
+    
+    fig_tributos = px.bar(tributos_area, x='nome_area', y='total_tributos',
+                         title='📋 Carga Tributária Média por Área (%)',
                          template='plotly_white',
-                         color='vendas',
-                         color_continuous_scale=[[0, COLORS['accent']], [1, COLORS['primary']]])
-    
-    fig_category.update_layout(
-        title_font_size=16,
-        title_x=0.02,
-        showlegend=False,
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        height=400
-    )
+                         color='total_tributos',
+                         color_continuous_scale=[[0, COLORS['secondary']], [1, COLORS['danger']]])
+    fig_tributos.update_layout(title_font_size=16, title_x=0.02, showlegend=False)
 
-    # Padrão por dia da semana
-    weekday_order = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-    weekday_names = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
+    # 6. Análise de Despesas
+    despesas_categoria = despesas.groupby('categoria')['valor'].sum().sort_values(ascending=True)
     
-    weekday_data = (filtered.groupby('order_weekday')['order_id']
-                   .nunique().reset_index()
-                   .rename(columns={'order_id': 'pedidos'}))
-    
-    # Reordenar e traduzir
-    weekday_data['order'] = weekday_data['order_weekday'].map({day: i for i, day in enumerate(weekday_order)})
-    weekday_data = weekday_data.sort_values('order')
-    weekday_data['weekday_pt'] = weekday_names
-    
-    fig_weekday = px.bar(weekday_data,
-                        x='weekday_pt',
-                        y='pedidos',
-                        title='📅 Pedidos por Dia da Semana',
-                        template='plotly_white',
-                        color='pedidos',
-                        color_continuous_scale=[[0, COLORS['secondary']], [1, COLORS['primary']]])
-    
-    fig_weekday.update_layout(
-        title_font_size=16,
-        title_x=0.02,
-        showlegend=False,
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)',
-        height=400
-    )
+    fig_despesas = px.bar(x=despesas_categoria.values, y=despesas_categoria.index,
+                         orientation='h',
+                         title='💸 Despesas por Categoria',
+                         template='plotly_white',
+                         color=despesas_categoria.values,
+                         color_continuous_scale=[[0, COLORS['accent']], [1, COLORS['danger']]])
+    fig_despesas.update_layout(title_font_size=16, title_x=0.02, showlegend=False)
 
-    return (kpi_revenue, kpi_orders, kpi_avg_ticket, kpi_customers,
-            kpi_avg_items, kpi_avg_freight, kpi_conversion,
-            fig_trend, fig_state, fig_payment, fig_category, fig_weekday)
+    return (kpi_receita, kpi_projetos, kpi_ticket, kpi_empresas,
+            kpi_liquida, kpi_tributos, kpi_conclusao,
+            fig_evolucao, fig_areas, fig_status, fig_emp_areas, fig_tributos, fig_despesas)
 
 
 if __name__ == '__main__':
-    print("🚀 Iniciando Dashboard EJ - Análise Financeira...")
+    print("🚀 Iniciando Dashboard Empresa Junior...")
     print("📊 Acesse: http://localhost:8050")
     print("⏹️  Para parar: Ctrl+C")
     
